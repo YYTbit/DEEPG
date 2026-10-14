@@ -1,0 +1,44 @@
+game:
+  alpha: 0.08
+  agents: 3
+  rounds: 3
+training:
+  grid: 201
+  updates: 4000
+  group_size: 32
+  seeds: [5, 6, 7, 8, 9]
+  learning_rate: 0.35
+  learning_decay: 900.0
+  learning_floor: 0.02
+  temperature: 2.0
+  temperature_decay: 700.0
+  temperature_floor: 0.35
+  record_every: 50
+generation:
+  temperature: 0.7
+  top_p: 0.95
+  precision: bfloat16
+  seeds: [5, 6, 7, 8, 9]
+  communication_tokens: 8192
+  max_message_tokens: 8192
+  equal_cap_tokens: 700
+  context_tokens: 32768
+  answer_rule: whole_message
+  attention: true
+  enable_thinking: false
+models:
+  Qwen3-8B: Qwen/Qwen3-8B
+  Gemma-3-27B: google/gemma-3-27b-it
+  Mistral-Small-3.1-24B: mistralai/Mistral-Small-3.1-24B-Instruct-2503
+datasets:
+  hotpotqa: data/hotpotqa/dev_distractor.json
+  musique: data/musique/musique_ans_v1.0_dev.jsonl
+  2wiki: data/2wiki/dev.json
+  feverous: data/feverous/dev.jsonl
+evaluation:
+  matched_budget_tokens: 6900
+  allocation_control_tokens: 3700
+  bootstrap_samples: 10000
+  sample_limit: null
+  wiki_database: data/feverous/feverous_wikiv1.db
+  aliases_2wiki: data/2wiki/id_aliases.json

@@ -1,0 +1,47 @@
+{
+  "revision": "a6efcfa3b40bb4d9cbf46f883a95d62020bd8251",
+  "graph": {
+    "agent_names": [
+      "AnalyzeAgent",
+      "AnalyzeAgent",
+      "AnalyzeAgent"
+    ],
+    "decision_method": "FinalRefer",
+    "optimized_spatial": true,
+    "optimized_temporal": true,
+    "fixed_spatial_masks": [
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        1,
+        0,
+        1
+      ],
+      [
+        1,
+        1,
+        0
+      ]
+    ],
+    "fixed_temporal_masks": [
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1
+      ]
+    ]
+  }
+}

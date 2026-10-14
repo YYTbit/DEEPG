@@ -1,0 +1,6 @@
+{
+  "AgentPrune": "deepg baseline --method AgentPrune --source external/AgentPrune --settings configs/agentprune_graph.json --checkpoint checkpoints/baselines/{model}/AgentPrune.pt --model {model_id}",
+  "AgentDropout": "deepg baseline --method AgentDropout --source external/AgentDropout --settings configs/agentdropout_graph.json --checkpoint checkpoints/baselines/{model}/AgentDropout.pt --model {model_id}",
+  "GDesigner": "deepg baseline --method GDesigner --source external/GDesigner --settings configs/gdesigner_graph.json --checkpoint checkpoints/baselines/{model}/GDesigner.pt --model {model_id}",
+  "GPTSwarm": "deepg baseline --method GPTSwarm --source external/GPTSwarm --settings configs/gptswarm_graph.json --checkpoint checkpoints/baselines/{model}/GPTSwarm.pt --model {model_id}"
+}

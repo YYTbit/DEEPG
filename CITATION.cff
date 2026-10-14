@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "Code for Displacement Externalities in Endogenous Position Games for Multi-Agent LLM Communication."
+type: software
+title: "Displacement Externalities in Endogenous Position Games for Multi-Agent LLM Communication"
+authors:
+  - name: Anonymous
+version: 1.0.0
+license: MIT
+date-released: 2026-10-13

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepg"
+version = "1.0.0"
+description = "Displacement Externalities in Endogenous Position Games for Multi-Agent LLM Communication"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "scipy>=1.11,<2", "PyYAML>=6,<7", "requests>=2.31,<3"]
+
+[project.optional-dependencies]
+local = ["torch>=2.6", "transformers>=4.51,<5", "accelerate>=1.5", "sentencepiece>=0.2", "protobuf>=4"]
+api = ["transformers>=4.51,<5", "sentencepiece>=0.2", "protobuf>=4"]
+data = ["pandas>=2,<3", "pyarrow>=15"]
+test = ["pytest>=8,<9"]
+
+[project.scripts]
+deepg = "deepg.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["deepg*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

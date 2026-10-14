@@ -1,0 +1,22 @@
+{
+  "AgentPrune": {
+    "url": "https://github.com/yanweiyue/AgentPrune.git",
+    "revision": "c544dd6a1858c02c6d5d371d23c6e6ff55e0be21",
+    "package": "AgentPrune"
+  },
+  "AgentDropout": {
+    "url": "https://github.com/wangzx1219/AgentDropout.git",
+    "revision": "855befab08df60ac734c9608b3b2f317ce687e6e",
+    "package": "AgentDropout"
+  },
+  "GDesigner": {
+    "url": "https://github.com/yanweiyue/GDesigner.git",
+    "revision": "a6efcfa3b40bb4d9cbf46f883a95d62020bd8251",
+    "package": "GDesigner"
+  },
+  "GPTSwarm": {
+    "url": "https://github.com/metauto-ai/GPTSwarm.git",
+    "revision": "c23a827f561c934ce21dd950408f7606aa4a8821",
+    "package": "swarm"
+  }
+}
