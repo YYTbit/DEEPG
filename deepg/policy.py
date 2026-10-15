@@ -24,6 +24,7 @@ class TabularPolicy:
         if np.any((states < 0) | (states >= self.grid)):
             raise ValueError("capacity states exceed the grid")
         values = self.logits[slot, states].copy() / temperature
+        # The state index sets the largest action that fits the remaining capacity.
         values[np.arange(self.grid)[None, :] > states[:, None]] = -np.inf
         values -= np.max(values, axis=1, keepdims=True)
         values = np.exp(values)
@@ -103,8 +104,10 @@ def train_policy(alpha, n, settings, seed, schedule, out):
             np.add.at(visits[i], states[:, i], 1)
             if i + 1 < n:
                 states[:, i + 1] = states[:, i] - actions[:, i]
+        # Centering each slot's rewards across trajectories reduces score-function variance.
         advantage = rewards - rewards.mean(axis=0, keepdims=True)
         for i in range(n):
+            # The sampled-action term and softmax correction form the categorical score-function gradient.
             gradient = -advantage[:, i, None] * distributions[i]
             gradient[np.arange(group), actions[:, i]] += advantage[:, i]
             np.add.at(policy.logits[i], states[:, i], learning_rate * gradient / (group * temperature))

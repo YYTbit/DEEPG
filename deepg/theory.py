@@ -57,6 +57,7 @@ def equilibrium_lengths(alpha, n, prices=None):
         raise ValueError("one finite price is required for every slot")
     mu = alpha + prices
     fractions = occupation_fraction(mu)
+    # Each slot receives the capacity retained by all preceding slots.
     capacity = np.r_[1.0, np.cumprod(retention_fraction(mu))[:-1]]
     return fractions * capacity
 
@@ -78,6 +79,7 @@ def planner_lengths(alpha, n):
     validate_game(alpha, n)
     residual = alpha / math.hypot(alpha, math.sqrt(n / 2))
     attended = (1 - residual * residual) / (2 * n)
+    # Differences between adjacent residual capacities give the planner's slot lengths.
     remaining = np.sqrt(np.maximum(1 - 2 * attended * np.arange(n + 1), 0))
     return remaining[:-1] - remaining[1:]
 

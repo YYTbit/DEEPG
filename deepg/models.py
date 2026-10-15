@@ -179,6 +179,7 @@ class LocalModel(ModelTokenizer):
         device = self.model.get_input_embeddings().weight.device
         inputs = torch.tensor([ids], device=device)
         with model_lock, torch.inference_mode(), self.recalibrated_attention(strength):
+            # Process prompt tokens in bounded chunks, carrying the KV cache into the final-token probe.
             cache = None
             for start in range(0, max(0, len(ids) - 1), 256):
                 end = min(start + 256, len(ids) - 1)
