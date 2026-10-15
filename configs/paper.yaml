@@ -19,7 +19,7 @@ generation:
   top_p: 0.95
   precision: bfloat16
   seeds: [5, 6, 7, 8, 9]
-  communication_tokens: 8192
+  communication_tokens: 32768
   max_message_tokens: 8192
   equal_cap_tokens: 700
   context_tokens: 32768

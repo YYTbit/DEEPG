@@ -102,7 +102,7 @@ def run_question(item, method, model, config, seed, policy=None):
     total_capacity = int(generation["communication_tokens"])
     if total_capacity < 1 or n < 1 or rounds < 1:
         raise ValueError("communication capacity, team size, and rounds must be positive")
-    transcript, messages = [], []
+    transcript, messages, scheduling = [], [], []
     remaining = total_capacity
     rng = np.random.default_rng(sample_seed(item["id"], seed, 0, 0))
     passages = "\n\n".join(p["title"] + "\n" + p["text"] for p in item["passages"])
@@ -126,16 +126,29 @@ def run_question(item, method, model, config, seed, policy=None):
                                if not line.startswith("Write the message you want to add. You have"))
         return [{"role": "user", "content": prompt}]
 
-    def generate(agent, slot, round_index, cap, snapshot):
-        prompt = prompt_for(agent, slot, round_index, cap, snapshot)
-        input_tokens = len(model.encode_chat(prompt))
-        if input_tokens + cap > generation["context_tokens"]:
-            raise ValueError("the complete evidence and transcript exceed the configured context capacity")
+    def prepare(agent, slot, round_index, cap, snapshot):
+        # Preserve the evidence and transcript; the output cap uses the remaining context.
+        requested = cap
+        while True:
+            prompt = prompt_for(agent, slot, round_index, cap, snapshot)
+            input_tokens = len(model.encode_chat(prompt))
+            available = generation["context_tokens"] - input_tokens
+            if available < 0:
+                raise ValueError("the complete evidence and transcript exceed the configured context capacity")
+            if cap > 0 and available == 0:
+                raise ValueError("the complete input leaves no context capacity for the next message")
+            if cap <= available:
+                return cap, prompt, input_tokens, requested
+            cap = available
+
+    def generate(agent, slot, round_index, cap, snapshot, prepared=None):
+        cap, prompt, input_tokens, requested = prepared or prepare(agent, slot, round_index, cap, snapshot)
         result = model.generate(prompt, cap, sample_seed(item["id"], seed, round_index, agent), strength)
         if not isinstance(result["tokens"], int) or not 0 <= result["tokens"] <= cap:
             raise ValueError("generation exceeded its committed token cap")
         return {**result, "agent": agent + 1, "slot": slot + 1, "round": round_index + 1,
-                "cap": cap, "price": float(spec["prices"][slot]), "input_tokens": input_tokens}, prompt
+                "cap": cap, "requested_cap": requested,
+                "price": float(spec["prices"][slot]), "input_tokens": input_tokens}, prompt
 
     for round_index in range(rounds):
         order = rng.permutation(n).tolist() if spec["order"].startswith("drawn") else list(range(n))
@@ -161,11 +174,25 @@ def run_question(item, method, model, config, seed, policy=None):
             caps = [min(cap, generation["equal_cap_tokens"]) for cap in caps]
         if method == "length_cap" and caps:
             caps = [min(cap, 2000) for cap in caps]
+        prepared = None
+        if parallel:
+            prepared = [prepare(agent, slot, round_index, caps[slot], snapshot)
+                        for slot, agent in enumerate(order)]
+            caps = [entry[0] for entry in prepared]
         reserved = [remaining] + (remaining - np.cumsum(caps)).tolist() if caps is not None else None
         if spec["order"] == "arrival":
             arrivals = config.get("free_order_delays")
             if arrivals is None:
-                arrivals = rng.uniform(0.0, 1.0, size=n).tolist()
+                arrivals = []
+                if not hasattr(model, "choose_arrival"):
+                    raise ValueError("free order requires model-selected delays or an explicit arrival trace")
+                for agent in range(n):
+                    choice = model.choose_arrival(
+                        prompt_for(agent, 0, round_index, min(remaining, generation["max_message_tokens"]), snapshot),
+                        sample_seed(item["id"] + "|schedule", seed, round_index, agent),
+                        generation["context_tokens"])
+                    arrivals.append(choice["delay"])
+                    scheduling.append({**choice, "agent": agent + 1, "round": round_index + 1})
             if len(arrivals) != n or any(not math.isfinite(d) or d < 0 for d in arrivals):
                 raise ValueError("free_order_delays requires one nonnegative arrival delay per agent")
             for slot, agent in enumerate(sorted(range(n), key=lambda agent: (arrivals[agent], agent))):
@@ -180,7 +207,8 @@ def run_question(item, method, model, config, seed, policy=None):
                 last_prompt = prompt
         elif parallel:
             with ThreadPoolExecutor(max_workers=n) as executor:
-                futures = {executor.submit(generate, agent, slot, round_index, caps[slot], snapshot): slot
+                futures = {executor.submit(generate, agent, slot, round_index, caps[slot], snapshot,
+                                           prepared[slot]): slot
                            for slot, agent in enumerate(order)}
                 completed = []
                 for future in as_completed(futures):
@@ -217,8 +245,12 @@ def run_question(item, method, model, config, seed, policy=None):
             "correct": exact_match(prediction, item["answers"]), "tokens": sum(m["tokens"] for m in messages),
             "middle": observation["middle"] if observation else None,
             "attention_backend": "model_probabilities" if observation else "unavailable",
-            "messages": messages, "attention": observation,
+            "messages": messages, "attention": observation, "scheduling": scheduling,
+            "scheduling_tokens": sum(record["tokens"] for record in scheduling),
+            "inference_tokens": sum(record["tokens"] for record in messages + scheduling),
             "protocol": {"order": spec["order"], "allocation": spec["allocation"],
+                         "arrival_rule": ("supplied_trace" if config.get("free_order_delays") is not None
+                                          else "model_selected_delay") if spec["order"] == "arrival" else None,
                          "slot_horizon": "round", "remaining_tokens": remaining}}
 
 

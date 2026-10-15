@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from deepg.policy import TabularPolicy
+from deepg.policy import TabularPolicy, train_policy
 from deepg.protocols import AGENT_PROMPT, method_spec, run_question, sample_seed
 from deepg.theory import slot_prices
 
@@ -21,6 +21,10 @@ class TestModel:
 
     def measure_attention(self, messages, strength=0):
         return None
+
+    def choose_arrival(self, messages, seed, context_tokens):
+        agent = int(messages[0]["content"].split("agent ")[1].split()[0])
+        return {"delay": (4 - agent) / 4, "tokens": 2, "text": "{}", "input_tokens": 80}
 
 
 @pytest.fixture
@@ -72,6 +76,55 @@ def test_arrival_order_reads_live_transcript(config, item):
     assert result["tokens"] == 9
     assert result["correct"] is True
     assert result["protocol"]["remaining_tokens"] == 111
+    assert [message["agent"] for message in result["messages"]] == [3, 2, 1]
+    assert result["scheduling_tokens"] == 6
+    assert result["inference_tokens"] == 15
+    assert result["protocol"]["arrival_rule"] == "model_selected_delay"
+
+
+def test_supplied_arrivals_and_context_limited_caps(config, item):
+    config["game"]["rounds"] = 1
+    config["generation"]["context_tokens"] = 130
+    config["free_order_delays"] = [0.3, 0.1, 0.2]
+    result = run_question(item, "free_order", TestModel(), config, 5)
+    assert [message["agent"] for message in result["messages"]] == [2, 3, 1]
+    assert all(message["input_tokens"] + message["cap"] <= 130 for message in result["messages"])
+    assert result["messages"][0]["cap"] < result["messages"][0]["requested_cap"]
+    assert result["scheduling_tokens"] == 0
+
+
+def test_parallel_caps_fit_context_before_commitment(config, item):
+    config["generation"]["context_tokens"] = 110
+    result = run_question(item, "rotation", TestModel(), config, 5)
+    first = result["messages"][:3]
+    assert all(message["input_tokens"] + message["cap"] <= 110 for message in result["messages"])
+    assert first[-1]["capacity_after_commitment"] == 120 - sum(message["cap"] for message in first)
+
+
+def test_full_evidence_is_never_silently_truncated(config, item):
+    config["generation"]["context_tokens"] = 5
+    with pytest.raises(ValueError, match="complete evidence"):
+        run_question(item, "rotation", TestModel(), config, 5)
+
+
+def test_training_step_uses_the_published_group_sum(tmp_path):
+    settings = {"grid": 5, "group_size": 4, "updates": 1, "temperature": 2.0,
+                "temperature_decay": 700, "temperature_floor": 0.35, "learning_rate": 0.35,
+                "learning_decay": 900, "learning_floor": 0.02, "record_every": 1}
+    seed, alpha = 8, 0.08
+    draws = np.random.default_rng(seed).random((4, 1))
+    probabilities = np.full((4, 5), 0.2)
+    actions = (np.cumsum(probabilities, axis=1) < draws).sum(axis=1)
+    lengths = actions / 4
+    rewards = np.sqrt(lengths * (1 - lengths / 2)) - alpha * lengths
+    advantage = rewards - rewards.mean()
+    expected = np.sum(-advantage[:, None] * probabilities, axis=0)
+    np.add.at(expected, actions, advantage)
+    train_policy(alpha, 1, settings, seed, "unpriced", tmp_path)
+    policy, metadata = TabularPolicy.load(tmp_path / "unpriced/8/policy.npz")
+    np.testing.assert_allclose(policy.logits[0, 4], 0.35 * expected, atol=1e-14)
+    assert np.count_nonzero(policy.logits[0, :4]) == 0
+    assert metadata["update_rule"] == "supplement_equation_50_group_sum"
 
 
 def test_trained_caps_are_committed_before_drafting(config, item):

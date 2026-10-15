@@ -107,10 +107,10 @@ def train_policy(alpha, n, settings, seed, schedule, out):
         # Centering each slot's rewards across trajectories reduces score-function variance.
         advantage = rewards - rewards.mean(axis=0, keepdims=True)
         for i in range(n):
-            # The sampled-action term and softmax correction form the categorical score-function gradient.
+            # Equation (50) sums the group score terms at the stated step size.
             gradient = -advantage[:, i, None] * distributions[i]
             gradient[np.arange(group), actions[:, i]] += advantage[:, i]
-            np.add.at(policy.logits[i], states[:, i], learning_rate * gradient / (group * temperature))
+            np.add.at(policy.logits[i], states[:, i], learning_rate * gradient)
         if (step + 1) % settings["record_every"] == 0 or step + 1 == updates:
             lengths = policy.allocation()
             target = equilibrium_lengths(alpha, n, prices)
@@ -119,6 +119,7 @@ def train_policy(alpha, n, settings, seed, schedule, out):
                             "profile_error": float(np.max(np.abs(lengths - target))),
                             "temperature": temperature, "learning_rate": learning_rate})
     metadata = {"kind": "training_run", "seed": seed, "schedule": schedule,
+                "update_rule": "supplement_equation_50_group_sum",
                 "settings": dict(settings), "agents": n, "alpha": alpha}
     directory = Path(out) / schedule / str(seed)
     directory.mkdir(parents=True, exist_ok=True)

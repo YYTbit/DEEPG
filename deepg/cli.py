@@ -39,6 +39,8 @@ def evaluate(args, config):
         config["game"]["alpha"] = args.alpha
     if args.rounds is not None:
         config["game"]["rounds"] = args.rounds
+    if args.communication_tokens is not None:
+        config["generation"]["communication_tokens"] = args.communication_tokens
     if args.calibration_strength is not None:
         config["calibration_strength"] = args.calibration_strength
     path = args.data or config["datasets"][args.dataset]
@@ -157,6 +159,7 @@ def main():
     run.add_argument("--agents", type=int)
     run.add_argument("--alpha", type=float)
     run.add_argument("--rounds", type=int)
+    run.add_argument("--communication-tokens", type=int)
     run.add_argument("--limit", type=int)
     run.add_argument("--output", required=True)
     summary = commands.add_parser("summarize")

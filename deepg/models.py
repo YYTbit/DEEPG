@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 import time
 from contextlib import contextmanager
@@ -48,6 +49,31 @@ class ModelTokenizer:
     def encode_chat(self, messages):
         return self.tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True,
                                              enable_thinking=self.enable_thinking)
+
+    def choose_arrival(self, messages, seed, context_tokens):
+        instruction = (
+            "Choose when to append your message in this round. A smaller delay gives an earlier turn. "
+            'Return a JSON object with a single numeric field "delay" between 0 and 1.'
+        )
+        prompt = [dict(message) for message in messages]
+        if prompt and prompt[-1]["role"] == "user":
+            prompt[-1]["content"] += "\n\n" + instruction
+        else:
+            prompt.append({"role": "user", "content": instruction})
+        input_tokens = len(self.encode_chat(prompt))
+        cap = min(32, context_tokens - input_tokens)
+        if cap < 1:
+            raise ValueError("the scheduling decision exceeds the configured context capacity")
+        result = self.generate(prompt, cap, seed)
+        try:
+            value = json.loads(result["text"])
+            delay = value["delay"]
+        except (ValueError, TypeError, KeyError) as error:
+            raise ValueError("the free-order scheduling decision requires a JSON delay") from error
+        if (isinstance(delay, bool) or not isinstance(delay, (int, float))
+                or not np.isfinite(delay) or not 0 <= delay <= 1):
+            raise ValueError("the model-selected delay must be in [0, 1]")
+        return {**result, "delay": float(delay), "input_tokens": input_tokens}
 
 
 class ApiModel(ModelTokenizer):

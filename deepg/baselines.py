@@ -74,6 +74,10 @@ def run_baseline(request, method, source, checkpoint, graph_settings, model_name
             cap = min(cap, request["generation"]["communication_tokens"] - sum(m["tokens"] for m in messages))
             if max_tokens is not None:
                 cap = min(cap, int(max_tokens))
+            available = request["generation"]["context_tokens"] - len(engine.encode_chat(serialized))
+            if available < 0:
+                raise ValueError("the baseline prompt exceeds the configured context capacity")
+            cap = min(cap, available)
             seed = sample_seed(request["item"]["id"], request["seed"], 0, len(messages))
             result = engine.generate(serialized, cap, seed)
             messages.append({**result, "cap": cap})
