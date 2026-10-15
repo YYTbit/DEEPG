@@ -14,7 +14,7 @@ AGENT_PROMPT = (
     "You are agent {i} of {n} in a team that answers one question together.\n"
     "The question is {question}.\n"
     "The supporting passages are {passages}.\n"
-    "The transcript up to this turn is {transcript}.\n"
+    "The transcript so far is {transcript}.\n"
     "Write the message you want to add. You have {budget} tokens.\n"
     "{charge}\n"
     "Your message is read by the agents that follow you and by the reader that\n"
