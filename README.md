@@ -18,15 +18,12 @@ reduces to a slot-dependent price. A policy trained with this price reaches
 benchmarks, slot pricing improves average accuracy by 14.8 points over
 free-order communication while reducing generated tokens by 46.4%. It also
 exceeds the strongest baseline within 0.4k tokens of its budget by 7.1 points.
-Code and configuration are available at
-<https://anonymous.4open.science/r/DEEPG-94B7>.
 
 ![Endogenous position formation and incentive design](assets/figure1.png)
 
 ## Installation
 
-Use Python 3.10 or later. Install a PyTorch build appropriate for the execution
-hardware before loading a language model.
+Use Python 3.10 or later and install PyTorch for your system.
 
 ```bash
 python -m venv .venv
@@ -36,59 +33,35 @@ python -m pip install -e '.[local,data,test]' \
 export HF_ENDPOINT=https://hf-mirror.com
 ```
 
-## Analytical model and length-policy training
+## Usage
 
-Compute the equilibrium, planner allocation, and slot prices for the three-agent
-game.
+Compute the analytical solution and train the length policies:
 
 ```bash
 python -m deepg theory --alpha 0.08 --agents 3 --rounds 1 \
   --output results/theory.json
-```
 
-Train the tabular length policies under the three price conditions. The default
-configuration uses a 201-point capacity/action grid, 4,000 updates, groups of 32
-turns, and seeds 5–9. The resulting policies assign message-length caps during
-language-model evaluation.
-
-```bash
 python -m deepg train --schedule unpriced uniform slot \
   --output checkpoints
 ```
 
-The training output contains one `policy.npz` and learning record per condition
-and seed. Analytical verification entry points are in [scripts/](scripts).
+Training settings are in [configs/paper.yaml](configs/paper.yaml).
 
-## Benchmark preparation
+## Evaluation
 
-Obtain the official benchmark releases and retain their native development
-splits.
+Download the datasets from [HotpotQA](https://hotpotqa.github.io/),
+[MuSiQue](https://github.com/StonyBrookNLP/musique),
+[2WikiMultihopQA](https://github.com/Alab-NII/2wikimultihop), or
+[FEVEROUS](https://fever.ai/dataset/feverous.html). Follow the
+[data guide](docs/data.md) to prepare the required files.
 
-| Benchmark | Official resource | Input |
-| --- | --- | --- |
-| HotpotQA | [Project](https://hotpotqa.github.io/) | Distractor development questions and contexts |
-| MuSiQue-Ans | [Release](https://github.com/StonyBrookNLP/musique) | Answerable development questions and paragraphs |
-| 2WikiMultihopQA | [Release](https://github.com/Alab-NII/2wikimultihop) | Development questions, contexts, and answer aliases |
-| FEVEROUS | [Project](https://fever.ai/dataset/feverous.html) | Development claims and retrieved evidence |
-
-The [input reference](docs/data.md) specifies native fields, answer
-normalization, and FEVEROUS evidence records. Prepare a shared-format file
-before evaluation.
+For example, prepare HotpotQA and evaluate the trained slot-pricing policy:
 
 ```bash
 python -m deepg prepare --dataset hotpotqa \
   --input data/hotpotqa/hotpot_dev_distractor_v1.json \
   --output data/hotpotqa/prepared.jsonl
-```
 
-Agent inputs contain the question and evidence passages. Reference answers
-supply independent exact-match scoring after generation.
-
-## Evaluation
-
-Evaluate a trained slot-pricing policy with Qwen3-8B.
-
-```bash
 python -m deepg evaluate --model Qwen3-8B --dataset hotpotqa \
   --method slot_trained --data data/hotpotqa/prepared.jsonl \
   --policy checkpoints --output results/qwen_hotpot_slot.jsonl
@@ -97,38 +70,15 @@ python -m deepg summarize results/qwen_hotpot_slot.jsonl \
   --output results/summary.csv
 ```
 
-Evaluation resumes matching completed question–seed records. Run metadata binds
-inputs, decoding settings, and trained policies. Additional communication
-procedures and upstream baseline interfaces are described in [the protocol
-reference](docs/protocols.md).
+Other communication methods and baseline integrations are described in the
+[evaluation guide](docs/protocols.md).
 
-## Configuration
-
-[configs/paper.yaml](configs/paper.yaml) specifies the shared settings.
-
-| Setting | Value |
-| --- | --- |
-| Backbones | Qwen3-8B, Gemma-3-27B, Mistral-Small-3.1-24B |
-| Communication | 3 agents, 3 rounds |
-| Token cost | 0.08 |
-| Decoding | Temperature 0.7, top-p 0.95 |
-| Context and communication capacity | 32,768 tokens |
-| Maximum message length | 8,192 tokens |
-| Evaluation seeds | 5, 6, 7, 8, 9 |
-
-Pass an alternative configuration with `python -m deepg --config PATH ...`. The
-command help lists procedure, attention-profile, and budget options.
-
-## Software checks
+## Tests
 
 ```bash
-CUDA_VISIBLE_DEVICES='' python -m pytest -q
+python -m pytest -q
 ```
-
-The CPU suite checks analytical solutions, policy updates, communication
-scheduling, benchmark inputs, and metric accounting.
 
 ## License
 
-The code uses the [MIT License](LICENSE). The paper image retains its published
-license.
+The code uses the [MIT License](LICENSE). The paper image retains its published license.
