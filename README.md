@@ -28,19 +28,16 @@ Use Python 3.10 or later and install PyTorch for your system.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[local,data,test]' \
+python -m pip install -e '.[local,data]' \
   --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 export HF_ENDPOINT=https://hf-mirror.com
 ```
 
 ## Usage
 
-Compute the analytical solution and train the length policies:
+Train the length policies:
 
 ```bash
-python -m deepg theory --alpha 0.08 --agents 3 --rounds 1 \
-  --output results/theory.json
-
 python -m deepg train --schedule unpriced uniform slot \
   --output checkpoints
 ```
@@ -72,12 +69,6 @@ python -m deepg summarize results/qwen_hotpot_slot.jsonl \
 
 Other communication methods and baseline integrations are described in the
 [evaluation guide](docs/protocols.md).
-
-## Tests
-
-```bash
-python -m pytest -q
-```
 
 ## License
 

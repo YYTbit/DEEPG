@@ -5,16 +5,12 @@ import json
 import shlex
 from pathlib import Path
 
-import numpy as np
 import yaml
 
 from .data import file_digest, load_dataset
 from .policy import TabularPolicy, train_policy
 from .protocols import METHODS, run_external, run_question
 from .statistics import load_results, paired_bootstrap, write_summary
-from .theory import (AttentionProfile, calibration_solution, calibration_threshold, direct_externalities,
-                     equilibrium_lengths, equilibrium_welfare, planner_lengths, planner_welfare,
-                     slot_prices, optimal_uniform_price, welfare)
 
 
 def write_json(path, values):
@@ -128,14 +124,6 @@ def main():
     parser = argparse.ArgumentParser(description="Code for Displacement Externalities in Endogenous Position Games")
     parser.add_argument("--config", default="configs/paper.yaml")
     commands = parser.add_subparsers(dest="command", required=True)
-    theory = commands.add_parser("theory")
-    theory.add_argument("--alpha", type=float, default=0.08)
-    theory.add_argument("--agents", type=int, default=3)
-    theory.add_argument("--rounds", type=int, default=1)
-    theory.add_argument("--slope", type=float, default=1.0)
-    theory.add_argument("--profile")
-    theory.add_argument("--grid", type=int, default=201)
-    theory.add_argument("--output", default="results/theory.json")
     train = commands.add_parser("train")
     train.add_argument("--schedule", nargs="+", choices=("unpriced", "uniform", "slot", "reversed"),
                        default=["unpriced", "uniform", "slot"])
@@ -189,29 +177,7 @@ def main():
     bridge.add_argument("--model", required=True)
     bridge.add_argument("--tokenizer")
     args = parser.parse_args()
-    if args.command == "theory":
-        n = args.agents * args.rounds
-        alpha = args.alpha
-        prices = slot_prices(alpha, n)
-        uniform = optimal_uniform_price(alpha, n)
-        result = {"kind": "analytical", "alpha": alpha, "slots": n,
-                  "equilibrium_lengths": equilibrium_lengths(alpha, n).tolist(),
-                  "equilibrium_welfare": equilibrium_welfare(alpha, n),
-                  "planner_lengths": planner_lengths(alpha, n).tolist(),
-                  "planner_welfare": planner_welfare(alpha, n),
-                  "slot_prices": prices.tolist(), "uniform_price": uniform,
-                  "uniform_welfare": welfare(equilibrium_lengths(alpha, n, np.full(n, uniform)), alpha),
-                  "direct_externalities": direct_externalities(equilibrium_lengths(alpha, n)).tolist(),
-                  "calibration": {key: value.tolist() if isinstance(value, np.ndarray) else value
-                                  for key, value in calibration_solution(alpha, n, args.slope).items()},
-                  "thresholds": {str(k): calibration_threshold(alpha, k) for k in range(1, n) if k > 4 * alpha * alpha}}
-        if args.profile:
-            data = json.loads(Path(args.profile).read_text())
-            solution = AttentionProfile(data["positions"], data["values"]).solve_planner(alpha, n, args.grid)
-            result["general_profile"] = {**solution.allocation(), "planner_welfare": float(solution.values[n, 0]),
-                                         "grid": args.grid}
-        write_json(args.output, result)
-    elif args.command == "train":
+    if args.command == "train":
         config = yaml.safe_load(Path(args.config).read_text())
         seeds = [args.seed] if args.seed is not None else config["training"]["seeds"]
         for schedule in args.schedule:
