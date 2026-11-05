@@ -19,7 +19,19 @@ benchmarks, slot pricing improves average accuracy by 14.8 points over
 free-order communication while reducing generated tokens by 46.4%. It also
 exceeds the strongest baseline within 0.4k tokens of its budget by 7.1 points.
 
+## Method
+
+To connect positional attention with communication incentives, we first derive the best response and equilibrium allocation. We then quantify the displacement externality and welfare loss. Finally, we derive rotation and pricing mechanisms that change positional and marginal incentives.
+
 ![Endogenous position formation and incentive design](assets/figure1.png)
+
+**Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
+
+## Main Results
+
+**Table 1.** Main results on four benchmarks, grouped by backbone. Values are five-seed means with standard deviations. Middle is the mean attention share on the middle third of the transcript. Tokens reports thousands of generated tokens per team, or per agent for single-agent inference. The two proposed variants use the same slot-price schedule through a trained policy or a prompted price signal.
+
+![Main results from Table 1](assets/main_results.png)
 
 ## Installation
 
@@ -33,7 +45,7 @@ python -m pip install -e '.[local,data]' \
 export HF_ENDPOINT=https://hf-mirror.com
 ```
 
-## Usage
+## Training
 
 Train the length policies:
 
@@ -52,7 +64,7 @@ Download the datasets from [HotpotQA](https://hotpotqa.github.io/),
 [FEVEROUS](https://fever.ai/dataset/feverous.html). Follow the
 [data guide](docs/data.md) to prepare the required files.
 
-For example, prepare HotpotQA and evaluate the trained slot-pricing policy:
+Prepare HotpotQA and evaluate the trained slot-pricing policy:
 
 ```bash
 python -m deepg prepare --dataset hotpotqa \
@@ -72,4 +84,4 @@ Other communication methods and baseline integrations are described in the
 
 ## License
 
-The code uses the [MIT License](LICENSE). The paper image retains its published license.
+The code uses the [MIT License](LICENSE).
