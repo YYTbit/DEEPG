@@ -36,13 +36,23 @@ The prompted variant communicates the same price through a sentence in the promp
 
 ## Results
 
+### Main Results
+
 **Table 1.** Main results on four benchmarks, grouped by backbone. Values are five-seed means with standard deviations. Middle is the mean attention share on the middle third of the transcript. Tokens reports thousands of generated tokens per team, or per agent for single-agent inference. The two proposed variants use the same slot-price schedule through a trained policy or a prompted price signal.
 
 ![Main results from Table 1](assets/main_results.png)
 
-**Slot pricing improves accuracy while reducing communication cost.** Table 1 compares methods on shared questions and checkpoints. The trained policy reaches 62.8 average accuracy with 3.7k generated tokens, compared with 48.0 and 6.9k under free order. This is a 14.8-point gain with a paired-bootstrap 95% CI of [12.5, 17.1], resampling questions and seeds, and a 46.4% reduction in generated tokens. The prompted price reaches 62.2 accuracy.
+### Ablation Study
 
-**Pricing improves allocation beyond protocol-level controls.** Predetermined order reaches 55.3 accuracy and round-robin 55.7; the four released designs reach 53.2–55.4 with 3.9–4.3k tokens. Slot pricing exceeds the strongest baseline within 0.4k tokens of its budget by 7.1 points, with a 95% CI of [5.6, 8.6]. These controls regulate speaking order, interaction structure, or participation. Slot pricing additionally charges early messages for the downstream communication they displace.
+**Table 2.** Coarse and fine ablations with three agents, averaged over three backbones and five seeds. Deviations are standard deviations across seeds. Matched variants use the 6.9k-token free-order budget; price multipliers scale the theory-guided uniform price. Δ is the accuracy gain over free order. Middle and Tokens follow Table 1.
+
+![Component ablations from Table 2](assets/ablations.png)
+
+### Analysis
+
+![Analysis from Figure 2](assets/analysis.png)
+
+**Figure 2.** Mechanism controls. (a) Accuracy under prompt controls and pricing on a predetermined order. (b) Predicted and measured capacity shares. (c) First-agent share as the stated price increases. (d) Message-length distributions. Error bars in (a)–(c) show five-seed standard deviations.
 
 ## Getting Started
 
@@ -64,9 +74,10 @@ Download [HotpotQA](https://hotpotqa.github.io/),
 [MuSiQue](https://github.com/StonyBrookNLP/musique),
 [2WikiMultihopQA](https://github.com/Alab-NII/2wikimultihop), and
 [FEVEROUS](https://fever.ai/dataset/feverous.html).
-Prepare the evaluation inputs and FEVEROUS evidence following the
-[data guide](docs/data.md), and set dataset paths in [configs/paper.yaml](configs/paper.yaml).
-Configure the upstream baseline integrations using the [evaluation guide](docs/protocols.md).
+Set the dataset paths in `configs/paper.yaml` and save retrieved FEVEROUS evidence
+to `data/feverous/evidence.json`. The loaders accept the benchmark formats described
+in [data inputs](docs/data.md). Prepare the upstream baselines as described in
+[baseline execution](docs/protocols.md).
 
 ### Training and Evaluation
 
