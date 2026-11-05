@@ -23,16 +23,11 @@ exceeds the strongest baseline within 0.4k tokens of its budget by 7.1 points.
 
 To connect positional attention with communication incentives, we first derive the best response and equilibrium allocation. We then quantify the displacement externality and welfare loss. Finally, we derive rotation and pricing mechanisms that change positional and marginal incentives.
 
-1. To learn the price response, a tabular policy maps remaining capacity and slot index to a distribution over feasible lengths on a 201-point grid.
-2. We train it for 4000 updates using groups of 32 trajectories and policy gradients with each agent’s group-mean reward as a baseline. The reward is its payoff under the slot price, while reported welfare uses the true token cost.
-3. The designer draws a permutation uniformly from all possible speaking orders and announces it before the round, and each agent knows the slot it will occupy and the price that slot carries.
-4. At deployment, policy outputs set per-slot token caps before parallel drafting. The lengths are then committed in parallel, with every agent writing without reading the round it is part of, and the committed messages are placed in the drawn order.
-
-The prompted variant communicates the same price through a sentence in the prompt. Both variants use the released language-model weights.
-
 ![Endogenous position formation and incentive design](assets/figure1.png)
 
 **Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
+
+**Training and deployment.** To learn the price response, a tabular policy maps remaining capacity and slot index to a distribution over feasible lengths on a 201-point grid. We train it for 4000 updates using groups of 32 trajectories and policy gradients with each agent’s group-mean reward as a baseline. The reward is its payoff under the slot price, while reported welfare uses the true token cost. At deployment, policy outputs set per-slot token caps before parallel drafting. The prompted variant communicates the same price through a sentence in the prompt. Both variants use the released language-model weights.
 
 ## Results
 
@@ -48,24 +43,24 @@ The prompted variant communicates the same price through a sentence in the promp
 
 ![Component ablations from Table 2](assets/ablations.png)
 
+**The per-slot cap encodes the planner allocation, while the uniform cap equalizes lengths.** The trained policy adapts its allocation to residual capacity. Increasing the generation budget to 6.9k changes predetermined-order accuracy from 55.3 to 55.8 and rotation from 59.2 to 59.6, hence the larger gains come from reallocating shared context.
+
 ### Analysis
 
 ![Analysis from Figure 2](assets/analysis.png)
 
 **Figure 2.** Mechanism controls. (a) Accuracy under prompt controls and pricing on a predetermined order. (b) Predicted and measured capacity shares. (c) First-agent share as the stated price increases. (d) Message-length distributions. Error bars in (a)–(c) show five-seed standard deviations.
 
+**Increasing price reduces the first-agent share from 0.876 to 0.148 (Figure 2c) and shifts the distribution toward shorter messages (Figure 2d).** These responses follow from the reduced marginal value of occupying context.
+
 ## Getting Started
 
 ### Environment Setup
 
-Use Python 3.10 or later and install PyTorch for your system.
-
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[local,data]' \
-  --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-export HF_ENDPOINT=https://hf-mirror.com
+conda create -n deepg python=3.10 -y
+conda activate deepg
+pip install -e '.[local,data]'
 ```
 
 ### Data Preparation
@@ -79,15 +74,20 @@ to `data/feverous/evidence.json`. The loaders accept the benchmark formats descr
 in [data inputs](docs/data.md). Prepare the upstream baselines as described in
 [baseline execution](docs/protocols.md).
 
-### Training and Evaluation
+## Training
 
-Train the length policies, then evaluate the configured models, datasets, and
-communication methods:
+Train the length policies:
 
 ```bash
 python -m deepg train --schedule unpriced uniform slot \
   --output checkpoints
+```
 
+## Evaluation
+
+Run the evaluation matrix and aggregate the outputs:
+
+```bash
 python scripts/run_matrix.py --config configs/paper.yaml --policy checkpoints \
   --evidence data/feverous/evidence.json --execute --output results/main
 
