@@ -37,21 +37,9 @@ To connect positional attention with communication incentives, we first derive t
 
 ![Main results from Table 1](assets/main_results.png)
 
-### Ablation Study
+**Slot pricing improves accuracy while reducing communication cost.** Table 1 compares methods on shared questions and checkpoints. The trained policy reaches 62.8 average accuracy with 3.7k generated tokens, compared with 48.0 and 6.9k under free order. This is a 14.8-point gain with a paired-bootstrap 95% CI of [12.5, 17.1], resampling questions and seeds, and a 46.4% reduction in generated tokens. The prompted price reaches 62.2 accuracy.
 
-**Table 2.** Coarse and fine ablations with three agents, averaged over three backbones and five seeds. Deviations are standard deviations across seeds. Matched variants use the 6.9k-token free-order budget; price multipliers scale the theory-guided uniform price. Δ is the accuracy gain over free order. Middle and Tokens follow Table 1.
-
-![Component ablations from Table 2](assets/ablations.png)
-
-**The per-slot cap encodes the planner allocation, while the uniform cap equalizes lengths.** The trained policy adapts its allocation to residual capacity. Increasing the generation budget to 6.9k changes predetermined-order accuracy from 55.3 to 55.8 and rotation from 59.2 to 59.6, hence the larger gains come from reallocating shared context.
-
-### Analysis
-
-![Analysis from Figure 2](assets/analysis.png)
-
-**Figure 2.** Mechanism controls. (a) Accuracy under prompt controls and pricing on a predetermined order. (b) Predicted and measured capacity shares. (c) First-agent share as the stated price increases. (d) Message-length distributions. Error bars in (a)–(c) show five-seed standard deviations.
-
-**Increasing price reduces the first-agent share from 0.876 to 0.148 (Figure 2c) and shifts the distribution toward shorter messages (Figure 2d).** These responses follow from the reduced marginal value of occupying context.
+**Pricing improves allocation beyond protocol-level controls.** Predetermined order reaches 55.3 accuracy and round-robin 55.7; the four released designs reach 53.2–55.4 with 3.9–4.3k tokens. Slot pricing exceeds the strongest baseline within 0.4k tokens of its budget by 7.1 points, with a 95% CI of [5.6, 8.6]. These controls regulate speaking order, interaction structure, or participation. Slot pricing additionally charges early messages for the downstream communication they displace.
 
 ## Getting Started
 
