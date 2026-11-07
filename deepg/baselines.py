@@ -6,6 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .data import file_digest
+from .loading import digest
+
 
 def fetch_baselines(manifest, output):
     definitions = json.loads(Path(manifest).read_text())
@@ -56,8 +59,9 @@ def run_baseline(request, method, source, checkpoint, graph_settings, model_name
         raise ValueError("a trained upstream topology checkpoint is required")
     sys.path.insert(0, str(source))
     package = "swarm" if method == "GPTSwarm" else method
-    engine = (ApiModel(model_name, tokenizer, request["generation"]) if request.get("backend", "api") == "api"
-              else LocalModel(model_name, request["generation"]))
+    engine = (ApiModel(model_name, tokenizer, request["generation"], request.get("model_revision"))
+              if request.get("backend", "api") == "api"
+              else LocalModel(model_name, request["generation"], revision=request.get("model_revision")))
     messages = []
     final_prompt = None
     torch.manual_seed(request["seed"])
@@ -138,7 +142,9 @@ def run_baseline(request, method, source, checkpoint, graph_settings, model_name
         raise ValueError("upstream graph returned an unsupported answer")
     observation = engine.measure_attention(final_prompt) if request["generation"].get("attention") and final_prompt else None
     return {"prediction": final, "messages": messages, "middle": observation["middle"] if observation else None,
-            "revision": revision}
+            "revision": revision, "model_identity": engine.identity,
+            "baseline_identity": {"revision": revision, "checkpoint": file_digest(checkpoint),
+                                  "graph_settings": digest(graph_settings)}}
 
 
 def bridge(args):

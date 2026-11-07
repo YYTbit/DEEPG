@@ -2,13 +2,38 @@ import os
 import json
 import threading
 import time
+import copy
+import importlib
 from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import lru_cache
 
 import numpy as np
 import requests
 
+from .loading import digest, library_versions, local_weight_identity, resolve_configuration, tokenizer_identity
+
 
 model_lock = threading.RLock()
+_calibration = ContextVar("deepg_attention_calibration", default=None)
+
+
+@lru_cache(maxsize=None)
+def eager_function(module_name):
+    return importlib.import_module(module_name).eager_attention_forward
+
+
+def calibrated_attention(module, query, key, value, attention_mask, **kwargs):
+    calibration = _calibration.get()
+    if calibration is not None:
+        import torch
+
+        profile, strength = calibration
+        weights = np.interp(np.linspace(0, 1, key.shape[-2]), np.linspace(0, 1, len(profile)), profile)
+        bias = torch.as_tensor(-strength * np.log(weights), device=query.device, dtype=query.dtype)[None, None, None, :]
+        attention_mask = bias if attention_mask is None else attention_mask + bias
+    # Each backbone retains its native scaling, grouped heads, soft cap and causal mask.
+    return eager_function(type(module).__module__)(module, query, key, value, attention_mask, **kwargs)
 
 
 def attention_mass(tensors, sequence_length):
@@ -38,10 +63,14 @@ def middle_attention(mass):
 
 
 class ModelTokenizer:
-    def __init__(self, name, enable_thinking=False):
+    def __init__(self, name, enable_thinking=False, revision=None, configuration=None):
         from transformers import AutoTokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(name)
+        if configuration is None:
+            configuration, revision = resolve_configuration(name, revision)
+        self.tokenizer = AutoTokenizer.from_pretrained(name, revision=revision)
         self.enable_thinking = bool(enable_thinking)
+        self.identity = {"tokenizer_model": name, "revision": revision,
+                         "tokenizer": tokenizer_identity(self.tokenizer), "enable_thinking": self.enable_thinking}
 
     def encode(self, text):
         return self.tokenizer.encode(text, add_special_tokens=False)
@@ -77,9 +106,9 @@ class ModelTokenizer:
 
 
 class ApiModel(ModelTokenizer):
-    def __init__(self, name, tokenizer=None, settings=None):
+    def __init__(self, name, tokenizer=None, settings=None, revision=None):
         settings = settings or {}
-        super().__init__(tokenizer or name, settings.get("enable_thinking", False))
+        super().__init__(tokenizer or name, settings.get("enable_thinking", False), revision)
         server = os.environ.get("LLM_SERVER", "").rstrip("/")
         if not server:
             raise ValueError("set LLM_SERVER to the inference server base URL")
@@ -87,6 +116,7 @@ class ApiModel(ModelTokenizer):
         self.name = name
         self.settings = settings
         self.key = os.environ.get("LLM_KEY", "")
+        self.identity.update(backend="api", model=name, libraries=library_versions("transformers"))
 
     def generate(self, messages, max_tokens, seed, strength=0.0):
         if strength:
@@ -131,49 +161,67 @@ class ApiModel(ModelTokenizer):
 
 
 class LocalModel(ModelTokenizer):
-    def __init__(self, name, settings, device_map="auto", profile=None):
+    def __init__(self, name, settings, device_map="auto", profile=None, revision=None):
         import torch
         from transformers import AutoModelForCausalLM, AutoModelForImageTextToText
-        super().__init__(name, settings.get("enable_thinking", False))
+        configuration, revision = resolve_configuration(name, revision)
+        super().__init__(name, settings.get("enable_thinking", False), revision, configuration)
         self.settings = settings
         dtype = getattr(torch, settings["precision"])
-        kwargs = {"torch_dtype": dtype, "device_map": device_map, "attn_implementation": "eager"}
-        try:
-            self.model = AutoModelForCausalLM.from_pretrained(name, **kwargs)
-        except ValueError as error:
-            if "Unrecognized configuration class" not in str(error):
-                raise
-            self.model = AutoModelForImageTextToText.from_pretrained(name, **kwargs)
+        loader = (AutoModelForImageTextToText if configuration.model_type in {"gemma3", "mistral3"}
+                  else AutoModelForCausalLM)
+        self.model = loader.from_pretrained(name, config=configuration, revision=revision, torch_dtype=dtype,
+                                            device_map=device_map, attn_implementation="eager")
         self.model.eval()
         self.attention_profile = None
         if profile:
-            values = np.load(profile) if str(profile).endswith(".npy") else np.asarray(__import__("json").loads(open(profile).read()), dtype=float)
+            from pathlib import Path
+
+            values = (np.load(profile, allow_pickle=False) if str(profile).endswith(".npy")
+                      else np.asarray(json.loads(Path(profile).read_text()), dtype=float))
             if values.ndim != 1 or len(values) < 2 or np.any(~np.isfinite(values)) or np.any(values <= 0):
                 raise ValueError("calibration requires a positive measured attention profile")
             self.attention_profile = values / values.mean()
+            from transformers import AttentionInterface, AttentionMaskInterface
+            from transformers.masking_utils import eager_mask
+
+            AttentionInterface.register("deepg_calibrated_eager", calibrated_attention)
+            AttentionMaskInterface.register("deepg_calibrated_eager", eager_mask)
+            self.model.set_attn_implementation("deepg_calibrated_eager")
+        self.identity.update(backend="local", model=name, precision=settings["precision"],
+                             local_weights=local_weight_identity(name),
+                             generation=digest(self.generation_config().to_dict()),
+                             libraries=library_versions("torch", "transformers"), protocol=2)
+
+    def generation_config(self):
+        configuration = copy.deepcopy(self.model.generation_config)
+        configuration.do_sample = self.settings["temperature"] > 0
+        if configuration.do_sample:
+            configuration.temperature = self.settings["temperature"]
+            configuration.top_p = self.settings["top_p"]
+        if self.tokenizer.pad_token_id is not None:
+            configuration.pad_token_id = self.tokenizer.pad_token_id
+        elif configuration.pad_token_id is None:
+            eos = configuration.eos_token_id
+            configuration.pad_token_id = eos[0] if isinstance(eos, list) else eos
+        return configuration
+
+    def cuda_devices(self):
+        devices = {parameter.device.index for parameter in self.model.parameters() if parameter.device.type == "cuda"}
+        return sorted(devices)
 
     @contextmanager
     def recalibrated_attention(self, strength):
-        import torch
-        import torch.nn.functional as functional
         if strength == 0:
             yield
             return
         if not 0 <= strength <= 1 or self.attention_profile is None:
             raise ValueError("calibration needs strength in [0, 1] and a measured profile")
-        original = functional.softmax
-        def calibrated_softmax(values, dim=None, *args, **kwargs):
-            if values.ndim == 4 and dim in (-1, 3):
-                weights = np.interp(np.linspace(0, 1, values.shape[-1]),
-                                    np.linspace(0, 1, len(self.attention_profile)), self.attention_profile)
-                bias = torch.tensor(-strength * np.log(weights), device=values.device, dtype=values.dtype)
-                values = values + bias
-            return original(values, dim, *args, **kwargs)
-        functional.softmax = calibrated_softmax
+        token = _calibration.set((self.attention_profile, strength))
         try:
             yield
         finally:
-            functional.softmax = original
+            _calibration.reset(token)
 
     def generate(self, messages, max_tokens, seed, strength=0.0):
         import torch
@@ -184,18 +232,22 @@ class LocalModel(ModelTokenizer):
             raise ValueError("prompt and token cap exceed context_tokens")
         device = self.model.get_input_embeddings().weight.device
         inputs = torch.tensor([ids], device=device)
-        with model_lock, torch.inference_mode(), torch.random.fork_rng(), self.recalibrated_attention(strength):
-            torch.manual_seed(int(seed))
-            sampling = self.settings["temperature"] > 0
-            kwargs = {"do_sample": sampling, "max_new_tokens": int(max_tokens),
-                      "pad_token_id": self.tokenizer.pad_token_id or self.tokenizer.eos_token_id}
-            if sampling:
-                kwargs.update(temperature=self.settings["temperature"], top_p=self.settings["top_p"])
-            outputs = self.model.generate(input_ids=inputs, attention_mask=torch.ones_like(inputs), **kwargs)
-        generated = outputs[0, len(ids):]
+        devices = self.cuda_devices()
+        with model_lock, torch.inference_mode(), torch.random.fork_rng(devices=devices), self.recalibrated_attention(strength):
+            torch.random.default_generator.manual_seed(int(seed))
+            for index in devices:
+                torch.cuda.default_generators[index].manual_seed(int(seed))
+            outputs = self.model.generate(input_ids=inputs, attention_mask=torch.ones_like(inputs),
+                                          generation_config=self.generation_config(), use_model_defaults=False,
+                                          max_new_tokens=int(max_tokens))
+        sequences = outputs.sequences if hasattr(outputs, "sequences") else outputs
+        generated = sequences[0, len(ids):]
         text = self.tokenizer.decode(generated, skip_special_tokens=True)
+        eos = self.model.generation_config.eos_token_id
+        eos = eos if isinstance(eos, list) else [eos]
+        stopped = len(generated) and int(generated[-1]) in eos
         return {"text": text, "tokens": int(len(generated)),
-                "finish_reason": "length" if len(generated) == max_tokens else "eos"}
+                "finish_reason": "eos" if stopped else "length"}
 
     def measure_attention(self, messages, strength=0.0):
         import torch

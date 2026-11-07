@@ -15,10 +15,12 @@ AGENT_PROMPT = (
     "The question is {question}.\n"
     "The supporting passages are {passages}.\n"
     "The transcript so far is {transcript}.\n"
-    "Write the message you want to add. You have {budget} tokens.\n"
+    "Write the message you want to add.\n"
+    "You have {budget} tokens.\n"
     "{charge}\n"
     "Your message is read by the agents that follow you and by the reader that\n"
-    "answers at the end. Answer with the message alone.\n"
+    "answers at the end.\n"
+    "Answer with the message alone.\n"
 )
 
 METHODS = (
@@ -118,12 +120,14 @@ def run_question(item, method, model, config, seed, policy=None):
             budget = "at most 2000"
         if method == "budget_hint":
             budget = "2000"
-        prompt = AGENT_PROMPT.format(i=agent + 1, n=n, question=item["question"], passages=passages,
+        # In an announced draw, the supplementary formulation indexes writers by their slots.
+        writer = slot + 1 if spec["order"].startswith("drawn") else agent + 1
+        prompt = AGENT_PROMPT.format(i=writer, n=n, question=item["question"], passages=passages,
                                      transcript=format_transcript(snapshot), budget=budget,
                                      charge=price_sentence(method, spec["prices"][slot], alpha))
         if method == "slot_no_budget":
             prompt = "\n".join(line for line in prompt.splitlines()
-                               if not line.startswith("Write the message you want to add. You have"))
+                               if not line.startswith("You have "))
         return [{"role": "user", "content": prompt}]
 
     def prepare(agent, slot, round_index, cap, snapshot):
@@ -260,7 +264,7 @@ def run_external(item, method, command, config, seed):
     public_item = {key: item[key] for key in ("id", "dataset", "question", "passages")}
     payload = {"item": public_item, "method": method, "seed": seed,
                "game": config["game"], "generation": config["generation"],
-               "backend": config.get("backend", "api")}
+               "backend": config.get("backend", "api"), "model_revision": config.get("model_revision")}
     process = subprocess.run(command, input=json.dumps(payload), text=True,
                              capture_output=True, timeout=config.get("baseline_timeout", 3600))
     if process.returncode:
@@ -279,4 +283,5 @@ def run_external(item, method, command, config, seed):
             "seed": seed, "prediction": prediction, "answers": item["answers"],
             "correct": exact_match(prediction, item["answers"]), "tokens": sum(m["tokens"] for m in messages),
             "middle": middle, "attention_backend": "model_probabilities" if middle is not None else "unavailable",
-            "messages": messages, "baseline_revision": result["revision"]}
+            "messages": messages, "baseline_revision": result["revision"],
+            "model_identity": result.get("model_identity"), "baseline_identity": result.get("baseline_identity")}

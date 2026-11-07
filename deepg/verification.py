@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+from scipy.integrate import trapezoid
 from scipy.optimize import minimize, minimize_scalar
 
 from .theory import (attended_information, calibration_solution, equilibrium_lengths,
@@ -17,7 +18,7 @@ def integrated_attention(starts, lengths, curve, quadrature=800):
     values = np.asarray(curve(positions), dtype=float)
     if np.any(~np.isfinite(values)) or np.any(values < -1e-12):
         raise ValueError("the attention curve must be finite and nonnegative")
-    return np.trapezoid(np.maximum(values, 0), dx=1 / (quadrature - 1), axis=-1) * lengths
+    return trapezoid(np.maximum(values, 0), dx=1 / (quadrature - 1), axis=-1) * lengths
 
 
 def grid_equilibrium(alpha, agents, curve=lambda x: 1 - x, steps=4000, quadrature=800):

@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from .theory import slot_prices, welfare, planner_lengths, planner_welfare, equilibrium_lengths, optimal_uniform_price
+from .io import write_json, write_npz
 
 
 class TabularPolicy:
@@ -48,8 +49,8 @@ class TabularPolicy:
     def save(self, path, metadata):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(path, logits=self.logits, alpha=self.alpha, prices=self.prices,
-                            grid=self.grid, metadata=json.dumps(metadata, sort_keys=True))
+        write_npz(path, logits=self.logits, alpha=self.alpha, prices=self.prices,
+                  grid=self.grid, metadata=json.dumps(metadata, sort_keys=True, allow_nan=False))
 
     @classmethod
     def load(cls, path):
@@ -73,17 +74,53 @@ def price_schedule(alpha, n, schedule):
     raise ValueError("unknown price schedule")
 
 
-def train_policy(alpha, n, settings, seed, schedule, out):
+def train_policy(alpha, n, settings, seed, schedule, out, resume=False):
     prices = price_schedule(alpha, n, schedule)
     policy = TabularPolicy(alpha, prices, settings["grid"])
     rng = np.random.default_rng(seed)
     group = int(settings["group_size"])
     updates = int(settings["updates"])
-    if group < 2 or updates < 1:
+    if group < 2 or updates < 1 or int(settings["record_every"]) < 1:
         raise ValueError("training requires at least two trajectories and one update")
     visits = np.zeros((n, policy.grid), dtype=int)
     history = []
-    for step in range(updates):
+    metadata = {"kind": "training_run", "seed": int(seed), "schedule": schedule,
+                "update_rule": "supplement_equation_50_group_sum",
+                "settings": dict(settings), "agents": int(n), "alpha": float(alpha), "numpy_version": np.__version__}
+    directory = Path(out) / schedule / str(seed)
+    checkpoint = directory / "policy.npz"
+    start = 0
+    if checkpoint.exists():
+        if not resume:
+            raise ValueError("a policy already exists; use --resume to continue the saved training run")
+        policy, saved = TabularPolicy.load(checkpoint)
+        if any(saved.get(key) != value for key, value in metadata.items()):
+            raise ValueError("training checkpoint and requested configuration differ")
+        state = saved.get("training_state")
+        if state is None:
+            raise ValueError("this checkpoint has no resumable training state")
+        if policy.alpha != alpha or not np.array_equal(policy.prices, prices) or policy.grid != settings["grid"]:
+            raise ValueError("training checkpoint and requested policy differ")
+        start = state["completed_updates"]
+        if not isinstance(start, int) or not 0 <= start <= updates:
+            raise ValueError("invalid saved update count")
+        visits = np.asarray(state["visits"], dtype=int)
+        if visits.shape != (n, policy.grid) or np.any(visits < 0) or np.any(visits.sum(axis=1) != group * start):
+            raise ValueError("invalid saved state visits")
+        rng.bit_generator.state = state["rng_state"]
+        history = state["history"]
+        if start and (not history or history[-1]["updates"] != start):
+            raise ValueError("training history and checkpoint cursor differ")
+
+    def report():
+        return {**metadata, "completed_updates": history[-1]["updates"] if history else 0,
+                "prices": prices.tolist(), "history": history, "visits": visits.tolist(),
+                "planner_lengths": planner_lengths(alpha, n).tolist(),
+                "planner_welfare": planner_welfare(alpha, n),
+                "equilibrium_lengths": equilibrium_lengths(alpha, n, prices).tolist(),
+                "equilibrium_welfare": welfare(equilibrium_lengths(alpha, n, prices), alpha)}
+
+    for step in range(start, updates):
         temperature = max(settings["temperature"] / (1 + step / settings["temperature_decay"]),
                           settings["temperature_floor"])
         learning_rate = max(settings["learning_rate"] / (1 + step / settings["learning_decay"]),
@@ -118,16 +155,10 @@ def train_policy(alpha, n, settings, seed, schedule, out):
                             "welfare": welfare(lengths, alpha),
                             "profile_error": float(np.max(np.abs(lengths - target))),
                             "temperature": temperature, "learning_rate": learning_rate})
-    metadata = {"kind": "training_run", "seed": seed, "schedule": schedule,
-                "update_rule": "supplement_equation_50_group_sum",
-                "settings": dict(settings), "agents": n, "alpha": alpha}
-    directory = Path(out) / schedule / str(seed)
-    directory.mkdir(parents=True, exist_ok=True)
-    policy.save(directory / "policy.npz", metadata)
-    report = {**metadata, "prices": prices.tolist(), "history": history,
-              "visits": visits.tolist(), "planner_lengths": planner_lengths(alpha, n).tolist(),
-              "planner_welfare": planner_welfare(alpha, n),
-              "equilibrium_lengths": equilibrium_lengths(alpha, n, prices).tolist(),
-              "equilibrium_welfare": welfare(equilibrium_lengths(alpha, n, prices), alpha)}
-    (directory / "training.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
-    return report
+            state = {"completed_updates": step + 1, "rng_state": rng.bit_generator.state,
+                     "visits": visits.tolist(), "history": history}
+            policy.save(checkpoint, {**metadata, "training_state": state})
+            write_json(directory / "training.json", report())
+    result = report()
+    write_json(directory / "training.json", result)
+    return result
