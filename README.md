@@ -4,11 +4,15 @@ Multi-agent LLM systems use shared transcripts to coordinate reasoning, yet mess
 
 ## Algorithm Flow
 
+The method overview is as follows:
+
 ![Endogenous position formation and incentive design](assets/figure1.png)
 
 **Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
 
 This diagnosis motivates two complementary designs. Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
+
+The algorithm flow includes:
 
 1. **Slot prices.** The exact instrument is a toll derived from downstream continuation values, which implements the planner allocation for continuous attention profiles. Under linear attention, it reduces to a slot-dependent price. Earlier slots pay more as their tokens displace more downstream communication, while the final slot carries a zero price.
 
