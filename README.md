@@ -10,7 +10,9 @@ The method overview is as follows:
 
 **Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
 
-This diagnosis motivates two complementary designs. Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
+Each token written by an early agent consumes shared capacity and shifts subsequent messages to later positions. The writer receives the private benefit of additional text, while downstream agents bear part of its cost.
+
+Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
 
 The algorithm flow includes:
 
