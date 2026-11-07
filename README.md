@@ -10,17 +10,13 @@ The method overview is as follows:
 
 **Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
 
-To connect positional attention with communication incentives, we first derive the best response and equilibrium allocation. We then quantify the displacement externality and welfare loss. Finally, we derive rotation and pricing mechanisms that change positional and marginal incentives.
+The method combines slot pricing with drawn-order rotation. Its training and deployment proceed as follows:
 
-To address these incentives, we study drawn-order rotation and token pricing, and derive a continuation-value toll that implements the planner allocation. Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
+1. **Set slot prices.** The exact instrument is a toll derived from downstream continuation values, which implements the planner allocation for continuous attention profiles. Under linear attention, it reduces to a slot-dependent price. Earlier slots pay more as their tokens displace more downstream communication, while the final slot carries a zero price.
 
-The resulting training and deployment procedure is as follows:
+2. **Train the length policy.** To learn the price response, a tabular policy maps remaining capacity and slot index to a distribution over feasible lengths on a 201-point grid. We train it for 4000 updates using groups of 32 trajectories and policy gradients with each agent’s group-mean reward as a baseline. The reward is its payoff under the slot price, while reported welfare uses the true token cost.
 
-1. **Slot prices.** The exact instrument is a toll derived from downstream continuation values, which implements the planner allocation for continuous attention profiles. Under linear attention, it reduces to a slot-dependent price. Earlier slots pay more as their tokens displace more downstream communication, while the final slot carries a zero price.
-
-2. **Training.** To learn the price response, a tabular policy maps remaining capacity and slot index to a distribution over feasible lengths on a 201-point grid. We train it for 4000 updates using groups of 32 trajectories and policy gradients with each agent’s group-mean reward as a baseline. The reward is its payoff under the slot price, while reported welfare uses the true token cost.
-
-3. **Drawn-order rotation and deployment.** The lengths are then committed in parallel, with every agent writing without reading the round it is part of, and the committed messages are placed in the drawn order. At deployment, policy outputs set per-slot token caps before parallel drafting. The prompted variant communicates the same price through a sentence in the prompt. Both variants use the released language-model weights.
+3. **Announce the order and draft in parallel.** Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. At deployment, policy outputs set per-slot token caps before parallel drafting. The lengths are then committed in parallel, with every agent writing without reading the round it is part of, and the committed messages are placed in the drawn order. The prompted variant communicates the same price through a sentence in the prompt. Both variants use the released language-model weights.
 
 ## Results
 
