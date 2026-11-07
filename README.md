@@ -10,11 +10,11 @@ The method overview is as follows:
 
 **Figure 1.** Endogenous position formation, calibration reversal, and incentive design. Longer early messages shift downstream communication toward weaker positions. Drawn-order rotation and length pricing act on the corresponding positional and marginal incentives.
 
-Each token written by an early agent consumes shared capacity and shifts subsequent messages to later positions. The writer receives the private benefit of additional text, while downstream agents bear part of its cost.
+To connect positional attention with communication incentives, we first derive the best response and equilibrium allocation. We then quantify the displacement externality and welfare loss. Finally, we derive rotation and pricing mechanisms that change positional and marginal incentives.
 
-Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
+To address these incentives, we study drawn-order rotation and token pricing, and derive a continuation-value toll that implements the planner allocation. Drawn-order rotation assigns and announces a random speaking order, after which writers commit their lengths in parallel. Per-token pricing charges for additional context occupation.
 
-The algorithm flow includes:
+The resulting training and deployment procedure is as follows:
 
 1. **Slot prices.** The exact instrument is a toll derived from downstream continuation values, which implements the planner allocation for continuous attention profiles. Under linear attention, it reduces to a slot-dependent price. Earlier slots pay more as their tokens displace more downstream communication, while the final slot carries a zero price.
 
