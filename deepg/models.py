@@ -28,12 +28,30 @@ def calibrated_attention(module, query, key, value, attention_mask, **kwargs):
     if calibration is not None:
         import torch
 
-        profile, strength = calibration
-        weights = np.interp(np.linspace(0, 1, key.shape[-2]), np.linspace(0, 1, len(profile)), profile)
+        profile, strength = calibration["profile"], calibration["strength"]
+        end = calibration["end"]
+        horizon = max(calibration["sequence_length"] or 0, end)
+        # Cached local keys retain their positions in the complete sequence.
+        positions = np.arange(key.shape[-2]) + max(0, end - key.shape[-2])
+        weights = np.interp(positions / max(1, horizon - 1), np.linspace(0, 1, len(profile)), profile)
         bias = torch.as_tensor(-strength * np.log(weights), device=query.device, dtype=query.dtype)[None, None, None, :]
         attention_mask = bias if attention_mask is None else attention_mask + bias
     # Each backbone retains its native scaling, grouped heads, soft cap and causal mask.
     return eager_function(type(module).__module__)(module, query, key, value, attention_mask, **kwargs)
+
+
+def calibration_positions(module, args, kwargs):
+    calibration = _calibration.get()
+    if calibration is None:
+        return
+    positions = kwargs.get("cache_position")
+    if positions is not None and positions.numel():
+        calibration["end"] = int(positions[-1]) + 1
+        return
+    inputs = kwargs.get("input_ids", args[0] if args else None)
+    width = inputs.shape[-1] if inputs is not None else kwargs["inputs_embeds"].shape[-2]
+    cache = kwargs.get("past_key_values")
+    calibration["end"] = int(cache.get_seq_length()) + width if cache is not None else width
 
 
 def attention_mass(tensors, sequence_length):
@@ -188,6 +206,7 @@ class LocalModel(ModelTokenizer):
             AttentionInterface.register("deepg_calibrated_eager", calibrated_attention)
             AttentionMaskInterface.register("deepg_calibrated_eager", eager_mask)
             self.model.set_attn_implementation("deepg_calibrated_eager")
+            self.model.register_forward_pre_hook(calibration_positions, with_kwargs=True)
         self.identity.update(backend="local", model=name, precision=settings["precision"],
                              local_weights=local_weight_identity(name),
                              generation=digest(self.generation_config().to_dict()),
@@ -211,13 +230,14 @@ class LocalModel(ModelTokenizer):
         return sorted(devices)
 
     @contextmanager
-    def recalibrated_attention(self, strength):
+    def recalibrated_attention(self, strength, sequence_length=None):
         if strength == 0:
             yield
             return
         if not 0 <= strength <= 1 or self.attention_profile is None:
             raise ValueError("calibration needs strength in [0, 1] and a measured profile")
-        token = _calibration.set((self.attention_profile, strength))
+        token = _calibration.set({"profile": self.attention_profile, "strength": strength,
+                                  "sequence_length": sequence_length, "end": 0})
         try:
             yield
         finally:
@@ -233,7 +253,7 @@ class LocalModel(ModelTokenizer):
         device = self.model.get_input_embeddings().weight.device
         inputs = torch.tensor([ids], device=device)
         devices = self.cuda_devices()
-        with model_lock, torch.inference_mode(), torch.random.fork_rng(devices=devices), self.recalibrated_attention(strength):
+        with model_lock, torch.inference_mode(), torch.random.fork_rng(devices=devices), self.recalibrated_attention(strength, len(ids)):
             torch.random.default_generator.manual_seed(int(seed))
             for index in devices:
                 torch.cuda.default_generators[index].manual_seed(int(seed))
@@ -256,7 +276,7 @@ class LocalModel(ModelTokenizer):
             raise ValueError("attention probe exceeds context_tokens")
         device = self.model.get_input_embeddings().weight.device
         inputs = torch.tensor([ids], device=device)
-        with model_lock, torch.inference_mode(), self.recalibrated_attention(strength):
+        with model_lock, torch.inference_mode(), self.recalibrated_attention(strength, len(ids)):
             # Process prompt tokens in bounded chunks, carrying the KV cache into the final-token probe.
             cache = None
             for start in range(0, max(0, len(ids) - 1), 256):

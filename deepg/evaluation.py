@@ -60,6 +60,8 @@ def evaluate(args, config):
                "baseline_command": args.baseline_command,
                "policy_sha256": {str(seed): checksum for seed, (_, checksum) in policies.items()},
                "revision": args.revision, "free_order_delays": config.get("free_order_delays")}
+    if args.attention_profile:
+        request["calibration_protocol"] = 2
     request_id = digest(request)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -26,4 +26,6 @@ Set the trained topology paths in `configs/baseline_commands.json`. The matrix t
 
 The local `calibration` control accepts `--attention-profile` with a positive one-dimensional NumPy or JSON profile measured on a separate calibration input. `LocalModel.measure_attention` returns the per-position profile used to construct that input. `--calibration-strength` sets a value in [0, 1]. The correction enters the native attention interface as a key-position log bias, preserving the backbone's causal and sliding-window masks.
 
+Calibration coordinates follow the complete input sequence across prompt chunks and sliding-window caches. Evaluation binds this convention to the saved calibration run.
+
 For an API backend, install `.[api]`, set `LLM_SERVER` to the OpenAI-compatible server URL, and use `--backend api`. Set `LLM_KEY` when the server requires authentication. `--tokenizer` identifies the matching released tokenizer when the served model uses an alias. The server must use the same tokenizer and chat template and report exact prompt and completion token counts. Attention measurements and reader-side calibration use the local backend.
